@@ -12,6 +12,7 @@ from nekro_agent.services.plugin.base import SandboxMethodType
 
 from .mem0_output_formatter import (
     format_add_output,
+    format_delete_output,
     format_get_all_output,
     format_history_output,
     format_search_output,
@@ -287,6 +288,56 @@ async def get_memory_history(_ctx: AgentCtx, memory_id: str) -> str:
         memory_id=raw_id,
     )
     return format_history_output(results)
+
+
+@plugin.mount_sandbox_method(
+    SandboxMethodType.BEHAVIOR,
+    name="删除记忆",
+    description="删除指定ID的记忆",
+)
+async def delete_memory(_ctx: AgentCtx, memory_id: str) -> None:
+    """
+    Deletes a specific memory by its ID.
+
+    Args:
+        memory_id (str): The unique ID of the memory to delete.
+
+    Returns:
+        None.
+
+    Examples:
+        delete_memory("01J5ZQ1A8S3J6M9Y4K2B7N")
+        delete_memory("3JSK76D9B837N")
+    """
+
+    # 提示词原文
+    """
+    删除指定ID的记忆.
+
+    Args:
+        memory_id (str): 要删除的记忆的唯一ID
+
+    Returns:
+        None.
+
+    Examples:
+        delete_memory("01J5ZQ1A8S3J6M9Y4K2B7N")
+        delete_memory("3JSK76D9B837N")
+    """
+    mem0 = await get_mem0_client()
+    if not mem0:
+        logger.error("无法获取 mem0 客户端实例，无法删除记忆")
+        return
+
+    # 支持传入 Base62 短ID，优先尝试还原为 UUID
+    try:
+        raw_id = decode_id(memory_id)
+    except Exception:
+        raw_id = memory_id
+
+    await mem0.delete(memory_id=raw_id)
+    msg = format_delete_output(memory_id)
+    logger.info(msg)
 
 
 # @plugin.mount_sandbox_method(
