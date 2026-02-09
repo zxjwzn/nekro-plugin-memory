@@ -13,6 +13,7 @@ from nekro_agent.api.schemas import AgentCtx
 from .plugin import (
     PluginConfig,
     _last_config_hash,
+    _last_dimension,
     _mem0_instance,
     get_memory_config,
     plugin,
@@ -20,6 +21,37 @@ from .plugin import (
 from .utils import get_model_group_info, get_preset_id
 
 _mem0_lock: asyncio.Lock = asyncio.Lock()
+
+async def reset_qdrant_collection() -> bool:
+    """删除并重新创建Qdrant集合，用于维度变更时"""
+    try:
+        from qdrant_client import AsyncQdrantClient
+
+        qdrant_config = get_qdrant_config()
+        collection_name = plugin.get_vector_collection_name()
+
+        # 创建Qdrant客户端
+        client = AsyncQdrantClient(
+            url=qdrant_config.url,
+            api_key=qdrant_config.api_key,
+        )
+
+        # 检查集合是否存在
+        collections = await client.get_collections()
+        collection_exists = any(
+            col.name == collection_name for col in collections.collections
+        )
+
+        if collection_exists:
+            # 删除现有集合
+            await client.delete_collection(collection_name=collection_name)
+            logger.info(f"已删除Qdrant集合: {collection_name}")
+
+        await client.close()
+        return True
+    except Exception as e:
+        logger.error(f"重置Qdrant集合失败: {e}")
+        return False
 
 async def create_mem0_client(config: MemoryConfig) -> AsyncMemory:
     # 创建mem0实例
@@ -96,7 +128,7 @@ def _config_incomplete() -> bool:
 
 async def get_mem0_client() -> Optional[AsyncMemory]:
     """异步获取mem0客户端实例"""
-    global _mem0_instance, _last_config_hash
+    global _mem0_instance, _last_config_hash, _last_dimension
 
     # 若配置不完整，则跳过初始化，避免底层依赖抛错导致插件加载失败
     if _config_incomplete():
@@ -112,6 +144,8 @@ async def get_mem0_client() -> Optional[AsyncMemory]:
     embedding_model = get_model_group_info(plugin_cfg.TEXT_EMBEDDING_MODEL)
     collection_name = plugin.get_vector_collection_name()
 
+    current_dimension = plugin_cfg.TEXT_EMBEDDING_DIMENSION
+
     fingerprint_parts = (
         str(qdrant_cfg.url or ""),
         str(qdrant_cfg.api_key or ""),
@@ -126,14 +160,27 @@ async def get_mem0_client() -> Optional[AsyncMemory]:
     )
     current_hash = hash("|".join(fingerprint_parts))
 
+    # 检测维度是否发生变化
+    dimension_changed = (
+        _last_dimension is not None and _last_dimension != current_dimension
+    )
+
     # 如果配置变了或者实例不存在，重新初始化（并发保护）
     if _mem0_instance is None or current_hash != _last_config_hash:
         async with _mem0_lock:
             # 双检，避免重复初始化
             if _mem0_instance is None or current_hash != _last_config_hash:
+                # 如果维度发生变化，需要重置Qdrant集合
+                if dimension_changed:
+                    logger.warning(
+                        f"检测到嵌入维度从 {_last_dimension} 变更为 {current_dimension}，正在重置Qdrant集合..."
+                    )
+                    await reset_qdrant_collection()
+
                 memory_config = await create_mem0_config()
                 _mem0_instance = await create_mem0_client(memory_config)
                 _last_config_hash = current_hash
+                _last_dimension = current_dimension
                 logger.info("记忆管理器已重新初始化")
 
     return _mem0_instance

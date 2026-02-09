@@ -397,8 +397,28 @@ async def reset_memory_command(_ctx: AgentCtx, chatmessage: ChatMessage, args: s
         logger.error("清空记忆失败")
 
 
+async def reset_collection_command(_ctx: AgentCtx, chatmessage: ChatMessage, args: str):  # noqa: ARG001
+    """重置Qdrant集合，用于维度变更后的手动重置"""
+    try:
+        from .mem0_utils import reset_qdrant_collection
+        from . import plugin as plugin_module
+
+        success = await reset_qdrant_collection()
+        if success:
+            # 重置mem0实例以触发重新创建
+            plugin_module._mem0_instance = None
+            plugin_module._last_config_hash = None
+            await _ctx.ms.send_text(_ctx.chat_key, "已重置向量数据库集合，将使用新的配置重新创建", _ctx)
+        else:
+            await _ctx.ms.send_text(_ctx.chat_key, "重置向量数据库集合失败，请查看日志", _ctx)
+    except Exception as e:
+        logger.error(f"重置向量数据库集合失败: {e}")
+        await _ctx.ms.send_text(_ctx.chat_key, f"重置向量数据库集合失败: {e}", _ctx)
+
+
 COMMAND_MAP = {
     "del_all_mem": reset_memory_command,
+    "reset_collection": reset_collection_command,
 }
 
 
@@ -538,7 +558,7 @@ async def inject_memory_prompt(_ctx: AgentCtx) -> str:
 @plugin.mount_cleanup_method()
 async def clean_up() -> None:
     """清理插件"""
-    global _mem0_instance, _last_config_hash, _memory_inject_cache
-    _mem0_instance = None
-    _last_config_hash = None
-    _memory_inject_cache = {}
+    from . import plugin as plugin_module
+    plugin_module._mem0_instance = None
+    plugin_module._last_config_hash = None
+    plugin_module._last_dimension = None
