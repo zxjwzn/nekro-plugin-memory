@@ -16,6 +16,7 @@ plugin = NekroPlugin(
 
 _mem0_instance = None
 _last_config_hash = None
+_last_dimension = None
 
 @plugin.mount_config()
 class PluginConfig(ConfigBase):
