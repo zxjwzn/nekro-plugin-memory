@@ -257,13 +257,18 @@ def format_add_output(data: Any) -> str:
     header = f"新增记忆（{len(items)} 条）"
     if not items:
         return header + "\n(无返回)"
-    
+
     # 对于新增记忆，也使用分组格式
     parts = [header]
     grouped_parts = _format_grouped_memories_with_events(items)
     parts.extend(grouped_parts)
-    
+
     return "\n\n".join(parts)
+
+
+def format_delete_output(memory_id: str) -> str:
+    """Format mem0.delete output."""
+    return f"已删除记忆 ID: {memory_id}"
 
 
 def _format_grouped_memories_with_events(items: List[Dict[str, Any]]) -> List[str]:
