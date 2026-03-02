@@ -3,8 +3,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Union
 
-from mem0.configs.base import MemoryConfig
-
 from nekro_agent.api.schemas import AgentCtx
 from nekro_agent.core.config import ModelConfigGroup
 from nekro_agent.core.config import config as core_config

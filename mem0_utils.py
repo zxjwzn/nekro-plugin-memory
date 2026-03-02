@@ -1,13 +1,10 @@
 import asyncio  # noqa: I001
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Optional
+from types import ModuleType
+from typing import Any, AsyncIterator, Optional
 
-from mem0 import AsyncMemory
-from mem0.configs.base import MemoryConfig
-from mem0.embeddings.configs import EmbedderConfig
-from mem0.llms.configs import LlmConfig
-from mem0.vector_stores.configs import VectorStoreConfig
 from nekro_agent.api.core import get_qdrant_config, logger
+from nekro_agent.api.plugin import dynamic_import_pkg
 from nekro_agent.api.schemas import AgentCtx
 
 from .plugin import (
@@ -21,12 +18,24 @@ from .utils import get_model_group_info, get_preset_id
 
 _mem0_lock: asyncio.Lock = asyncio.Lock()
 
-async def create_mem0_client(config: MemoryConfig) -> AsyncMemory:
+def _get_mem0() -> ModuleType:
+    """动态导入 mem0 模块"""
+    return dynamic_import_pkg("mem0ai>=0.1.79,<1.0.0", import_name="mem0")
+
+async def create_mem0_client(config: Any) -> Any:
     # 创建mem0实例
+    mem0 = _get_mem0()
+    AsyncMemory = mem0.AsyncMemory
     return AsyncMemory(config)
 
-async def create_mem0_config() -> MemoryConfig:
+async def create_mem0_config() -> Any:
     # 创建mem0配置实例
+    mem0 = _get_mem0()
+    MemoryConfig = mem0.configs.base.MemoryConfig
+    LlmConfig = mem0.llms.configs.LlmConfig
+    EmbedderConfig = mem0.embeddings.configs.EmbedderConfig
+    VectorStoreConfig = mem0.vector_stores.configs.VectorStoreConfig
+
     qdrant_config = get_qdrant_config()
     memory_config: PluginConfig = get_memory_config()
     llm_model = get_model_group_info(memory_config.MEMORY_MANAGE_MODEL)
@@ -94,7 +103,7 @@ def _config_incomplete() -> bool:
     )
 
 
-async def get_mem0_client() -> Optional[AsyncMemory]:
+async def get_mem0_client() -> Optional[Any]:
     """异步获取mem0客户端实例"""
     global _mem0_instance, _last_config_hash
 
@@ -140,7 +149,7 @@ async def get_mem0_client() -> Optional[AsyncMemory]:
 
 
 @asynccontextmanager
-async def get_memory() -> AsyncIterator[Optional[AsyncMemory]]:
+async def get_memory() -> AsyncIterator[Optional[Any]]:
     """官方风格的生命周期管理封装：在 with 块内安全使用内存客户端。"""
     mem = await get_mem0_client()
     try:
